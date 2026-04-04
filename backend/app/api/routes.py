@@ -104,13 +104,19 @@ async def upload_video(
         source = "upload"
         
     elif video_path:
-        final_video_path = Path(video_path)
+        video_path = video_path.strip()
         
-        if not final_video_path.is_absolute():
+        is_absolute = video_path.startswith('/') or (
+            len(video_path) > 2 and video_path[1] == ':' and video_path[2] in ('\\', '/')
+        )
+        
+        if not is_absolute:
             raise HTTPException(
                 status_code=400,
                 detail=f"Le chemin doit être absolu: {video_path}"
             )
+        
+        final_video_path = Path(video_path)
         
         if not final_video_path.exists():
             raise HTTPException(
