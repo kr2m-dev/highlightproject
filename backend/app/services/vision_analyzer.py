@@ -17,7 +17,9 @@ class VisionAnalyzer:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.groq.com/openai/v1"
-        self.model = "llama-3.2-11b-vision-preview"
+        # Modèle vision mis à jour (llama-3.2-11b-vision-preview décommissionné)
+        # Voir: https://console.groq.com/docs/deprecations
+        self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
         self.max_tokens = 800
         self.temperature = 0.2
 

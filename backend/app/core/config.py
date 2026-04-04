@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     GROQ_API_KEY: Optional[str] = None
 
-    GROQ_MODEL_VISION: str = "llama-3.2-11b-vision-preview"
+    GROQ_MODEL_VISION: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     GROQ_MODEL_WHISPER: str = "whisper-large-v3"
     GROQ_MAX_TOKENS: int = 800
     GROQ_TEMPERATURE: float = 0.2

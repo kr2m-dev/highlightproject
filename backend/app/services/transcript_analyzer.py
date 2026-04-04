@@ -158,32 +158,93 @@ class TranscriptAnalyzer:
     async def analyze_audio(
         self,
         audio_path: Path,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        segment_duration: int = 300
     ) -> Dict[str, Any]:
         """
         Transcrit et analyse l'audio
         
+        Si l'audio est trop grand, le divise en segments
+
         Args:
             audio_path: Chemin vers le fichier audio
             progress_callback: Fonction de callback pour la progression
-            
+            segment_duration: Durée des segments en secondes (pour gros fichiers)
+
         Returns:
             Dict avec transcript et highlights
         """
+        from ..utils.helpers import FrameExtractor
+        
         if progress_callback:
             progress_callback(0, 100, "Début de la transcription...")
+
+        # Vérifier la taille du fichier
+        file_size_mb = audio_path.stat().st_size / (1024 * 1024)
         
-        transcript = await self.transcribe(audio_path)
+        if file_size_mb > 20:  # Si > 20 MB, diviser en segments
+            logger.info(f"Audio trop grand ({file_size_mb:.1f} MB), division en segments...")
+            
+            extractor = FrameExtractor(audio_path.parent)
+            segments = await extractor.split_audio(audio_path, segment_duration)
+            
+            all_transcripts = []
+            all_highlights = []
+            total_segments = len(segments)
+            
+            for i, segment_path in enumerate(segments):
+                if progress_callback:
+                    progress = (i / total_segments) * 90
+                    progress_callback(int(progress), 100, f"Transcription segment {i+1}/{total_segments}...")
+                
+                # Calculer l'offset temporel pour ce segment
+                time_offset = i * segment_duration
+                
+                transcript = await self.transcribe(segment_path)
+                
+                # Ajuster les timestamps avec l'offset
+                for seg in transcript.get("segments", []):
+                    seg["start"] = seg.get("start", 0) + time_offset
+                    seg["end"] = seg.get("end", 0) + time_offset
+                
+                all_transcripts.append(transcript)
+                
+                # Analyser les highlights de ce segment
+                highlights = self.analyze_transcript(transcript)
+                for h in highlights:
+                    h["timestamp"] = h.get("timestamp", 0) + time_offset
+                all_highlights.extend(highlights)
+            
+            # Merger tous les transcripts
+            merged_transcript = {
+                "text": " ".join(t.get("text", "") for t in all_transcripts),
+                "segments": [],
+                "language": all_transcripts[0].get("language", "unknown") if all_transcripts else "unknown"
+            }
+            for t in all_transcripts:
+                merged_transcript["segments"].extend(t.get("segments", []))
+            
+            if progress_callback:
+                progress_callback(95, 100, "Analyse finale...")
+            
+            return {
+                "transcript": merged_transcript,
+                "highlights": all_highlights
+            }
         
-        if progress_callback:
-            progress_callback(50, 100, "Analyse du transcript...")
-        
-        highlights = self.analyze_transcript(transcript)
-        
-        if progress_callback:
-            progress_callback(100, 100, "Transcription terminée")
-        
-        return {
-            "transcript": transcript,
-            "highlights": highlights
-        }
+        else:
+            # Fichier assez petit, transcription normale
+            transcript = await self.transcribe(audio_path)
+
+            if progress_callback:
+                progress_callback(50, 100, "Analyse du transcript...")
+
+            highlights = self.analyze_transcript(transcript)
+
+            if progress_callback:
+                progress_callback(100, 100, "Transcription terminée")
+
+            return {
+                "transcript": transcript,
+                "highlights": highlights
+            }
