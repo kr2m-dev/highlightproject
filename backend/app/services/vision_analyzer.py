@@ -130,27 +130,22 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
                 "Content-Type": "application/json",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Connection": "keep-alive",
-                "Sec-Fetch-Dest": "empty",
-                "Sec-Fetch-Mode": "cors",
-                "Sec-Fetch-Site": "same-origin"
+                "Accept-Language": "en-US,en;q=0.9,fr;q=0.8"
             }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers=headers
-            )
-            
-            logger.info(f"API Response Status: {response.status_code}")
-            logger.info(f"API Response Body: {response.text[:500]}")
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers
+                )
+                
+                logger.info(f"API Response Status: {response.status_code}")
+                logger.info(f"API Response Body: {response.text[:500]}")
 
-            if response.status_code != 200:
-                logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
-                return self._default_result(timestamp, f"Erreur API: {response.status_code}")
+                if response.status_code != 200:
+                    logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
+                    return self._default_result(timestamp, f"Erreur API: {response.status_code}")
 
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
