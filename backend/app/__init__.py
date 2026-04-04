@@ -1,7 +1,4 @@
 """
 Video Highlight Extractor Package
 """
-from .main import app
-from .core.config import settings
-
-__version__ = settings.APP_VERSION
+__version__ = "2.0.0"
