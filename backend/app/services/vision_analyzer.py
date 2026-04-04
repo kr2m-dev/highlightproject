@@ -97,6 +97,9 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
         try:
             image_base64 = self._encode_image(image_path)
             
+            logger.info(f"Analyzing frame with model: {self.model}")
+            logger.info(f"Image size: {len(image_base64)} bytes (base64)")
+
             payload = {
                 "model": self.model,
                 "messages": [
@@ -135,16 +138,19 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
                 "Sec-Fetch-Site": "same-origin"
             }
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    json=payload,
-                    headers=headers
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
-                    return self._default_result(timestamp, f"Erreur API: {response.status_code}")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers
+            )
+            
+            logger.info(f"API Response Status: {response.status_code}")
+            logger.info(f"API Response Body: {response.text[:500]}")
+
+            if response.status_code != 200:
+                logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
+                return self._default_result(timestamp, f"Erreur API: {response.status_code}")
 
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]

@@ -65,6 +65,100 @@ async def health():
     }
 
 
+@app.get("/api/v1/debug/groq-models")
+async def debug_groq_models():
+    """Debug endpoint to check available Groq models"""
+    import httpx
+    
+    if not settings.GROQ_API_KEY:
+        return {"error": "No GROQ_API_KEY configured"}
+    
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}"
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                "https://api.groq.com/openai/v1/models",
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                models = [m["id"] for m in data.get("data", [])]
+                vision_models = [m for m in models if "vision" in m.lower()]
+                return {
+                    "all_models": models,
+                    "vision_models": vision_models,
+                    "configured_model": settings.GROQ_MODEL_VISION
+                }
+            else:
+                return {
+                    "error": f"API returned {response.status_code}",
+                    "detail": response.text
+                }
+        except Exception as e:
+            return {"error": str(e)}
+
+
+@app.get("/api/v1/debug/test-vision")
+async def debug_test_vision():
+    """Test vision API with a simple request"""
+    from PIL import Image
+    import io
+    import base64
+    
+    if not settings.GROQ_API_KEY:
+        return {"error": "No GROQ_API_KEY configured"}
+    
+    # Create a simple test image
+    img = Image.new('RGB', (100, 100), color='red')
+    buffer = io.BytesIO()
+    img.save(buffer, format='JPEG')
+    image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": settings.GROQ_MODEL_VISION,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What color is this image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 100
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                json=payload,
+                headers=headers
+            )
+            
+            return {
+                "status_code": response.status_code,
+                "model_used": settings.GROQ_MODEL_VISION,
+                "response": response.json() if response.status_code == 200 else response.text
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+
 @app.post("/api/v1/upload")
 async def upload_video(
     video: Optional[UploadFile] = File(None),
