@@ -200,10 +200,14 @@ async def upload_video(
     elif video_path:
         video_path = video_path.strip()
         
-        is_absolute = video_path.startswith('/') or (
-            len(video_path) > 2 and video_path[1] == ':' and video_path[2] in ('\\', '/')
+        # Linux absolute path: starts with /
+        # Windows absolute path: C:\ or C:/
+        BACKSLASH = chr(92)  # '\\'
+        is_absolute = (
+            video_path.startswith('/') or  # Linux
+            (len(video_path) >= 3 and video_path[1] == ':' and video_path[2] in (BACKSLASH, '/'))  # Windows
         )
-        
+
         if not is_absolute:
             raise HTTPException(
                 status_code=400,
