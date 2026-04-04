@@ -18,8 +18,15 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     GROQ_API_KEY: Optional[str] = None
-
+    NVIDIA_API_KEY: Optional[str] = None
+    
+    # Provider: "groq" ou "nvidia"
+    VISION_PROVIDER: str = "nvidia"
+    
     GROQ_MODEL_VISION: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    NVIDIA_MODEL_VISION: str = "moonshotai/kimi-k2-instruct-0905"  # Excellent pour vision
+    # Alternative NVIDIA: "z-ai/glm5"
+    
     GROQ_MODEL_WHISPER: str = "whisper-large-v3"
     GROQ_MAX_TOKENS: int = 800
     GROQ_TEMPERATURE: float = 0.2

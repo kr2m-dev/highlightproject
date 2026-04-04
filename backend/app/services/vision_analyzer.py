@@ -1,5 +1,5 @@
 """
-Analyseur de frames vidéo avec Groq Vision API (Llama 3.2 11B Vision)
+Analyseur de frames vidéo avec support multi-provider (Groq, NVIDIA Kimi, GLM)
 """
 import base64
 import json
@@ -14,12 +14,20 @@ logger = logging.getLogger(__name__)
 
 
 class VisionAnalyzer:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, provider: str = "nvidia"):
         self.api_key = api_key
-        self.base_url = "https://api.groq.com/openai/v1"
-        # Modèle vision mis à jour (llama-3.2-11b-vision-preview décommissionné)
-        # Voir: https://console.groq.com/docs/deprecations
-        self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        self.provider = provider
+        
+        if provider == "nvidia":
+            # NVIDIA API avec Kimi K2 ou GLM
+            self.base_url = "https://integrate.api.nvidia.com/v1"
+            self.model = "moonshotai/kimi-k2-instruct-0905"  # Excellent pour la vision
+            # Alternative: "z-ai/glm5" pour GLM
+        else:
+            # Groq API
+            self.base_url = "https://api.groq.com/openai/v1"
+            self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
+        
         self.max_tokens = 800
         self.temperature = 0.2
 
@@ -75,7 +83,7 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
 
     async def analyze_frame(self, image_path: Path, timestamp: float) -> Dict[str, Any]:
         """
-        Analyse une frame avec Groq Vision
+        Analyse une frame avec l'API Vision
         
         Args:
             image_path: Chemin vers l'image
@@ -85,7 +93,7 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
             Dict avec: timestamp, is_highlight, score, reasons, emotions, visual_elements, suggested_title
         """
         if not self.api_key:
-            logger.warning("Pas de clé API Groq - retourne un score par défaut")
+            logger.warning("Pas de clé API - retourne un score par défaut")
             return {
                 "timestamp": timestamp,
                 "is_highlight": False,
@@ -99,43 +107,54 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
         try:
             image_base64 = self._encode_image(image_path)
             
-            logger.info(f"Analyzing frame with model: {self.model}")
+            logger.info(f"Analyzing frame with {self.provider} - model: {self.model}")
             logger.info(f"Image size: {len(image_base64)} bytes (base64)")
+
+            # Format du message pour Kimi (vision)
+            messages = [
+                {
+                    "role": "system",
+                    "content": self._build_prompt()
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Analyse cette image et évalue son potentiel comme moment fort vidéo."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ]
 
             payload = {
                 "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": self._build_prompt()
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Analyse cette image et évalue son potentiel comme moment fort vidéo."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}",
-                                    "detail": "high"
-                                }
-                            }
-                        ]
-                    }
-                ],
+                "messages": messages,
                 "max_tokens": self.max_tokens,
                 "temperature": self.temperature
             }
 
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9,fr;q=0.8"
-            }
+            # Headers selon le provider
+            if self.provider == "nvidia":
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+            else:
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "application/json"
+                }
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            timeout = 120.0 if self.provider == "nvidia" else 60.0
+            
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     json=payload,
@@ -146,7 +165,7 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
                 logger.info(f"API Response Body: {response.text[:500]}")
 
                 if response.status_code != 200:
-                    logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
+                    logger.error(f"Erreur API {self.provider}: {response.status_code} - {response.text}")
                     return self._default_result(timestamp, f"Erreur API: {response.status_code}")
 
                 data = response.json()

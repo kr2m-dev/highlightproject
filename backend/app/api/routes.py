@@ -314,7 +314,11 @@ async def process_video(
                 created_at=jobs_store[job_id].created_at
             )
 
-            vision_analyzer = VisionAnalyzer(settings.GROQ_API_KEY)
+            # Choisir le provider (nvidia ou groq)
+            api_key = settings.NVIDIA_API_KEY or settings.GROQ_API_KEY
+            provider = settings.VISION_PROVIDER if settings.NVIDIA_API_KEY else "groq"
+            
+            vision_analyzer = VisionAnalyzer(api_key, provider=provider)
 
             def vision_progress_callback(current, total, msg):
                 progress = 30 + (current / total) * 25
