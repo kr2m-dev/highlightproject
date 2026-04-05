@@ -71,15 +71,13 @@ Un moment fort se caractérise par:
 - Un contenu particulièrement engageant
 - Une révélation ou surprise
 
-Réponds UNIQUEMENT en JSON valide avec ce format exact:
-{
-    "is_highlight": true ou false,
-    "score": nombre de 0 à 10,
-    "reasons": ["raison1", "raison2"],
-    "emotions": ["emotion1"],
-    "visual_elements": ["element1"],
-    "suggested_title": "Titre court du moment"
-}"""
+IMPORTANT: Tu DOIS répondre UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après.
+
+Format de réponse obligatoire (JSON uniquement):
+{"is_highlight": false, "score": 5, "reasons": ["raison1"], "emotions": [], "visual_elements": ["element1"], "suggested_title": "Titre"}
+
+Exemple de réponse correcte:
+{"is_highlight": true, "score": 8, "reasons": ["Action intense visible", "Expression faciale marquée"], "emotions": ["surprise"], "visual_elements": ["mouvement rapide"], "suggested_title": "Moment de réaction"}"""
 
     async def analyze_frame(self, image_path: Path, timestamp: float) -> Dict[str, Any]:
         """
@@ -171,6 +169,7 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
                 
+                # Essayer de parser le JSON
                 try:
                     json_start = content.find("{")
                     json_end = content.rfind("}") + 1
@@ -190,8 +189,9 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
                         "suggested_title": result.get("suggested_title", "Moment non nommé")
                     }
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Erreur parsing JSON: {e} - Content: {content}")
-                    return self._default_result(timestamp, "Erreur parsing réponse")
+                    # Si pas de JSON, analyser le texte pour extraire les infos
+                    logger.warning(f"Erreur parsing JSON, analyse texte: {e}")
+                    return self._parse_text_response(content, timestamp)
 
         except Exception as e:
             logger.error(f"Erreur analyse frame {image_path}: {e}")
@@ -207,6 +207,57 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact:
             "emotions": [],
             "visual_elements": [],
             "suggested_title": "Erreur d'analyse"
+        }
+
+    def _parse_text_response(self, text: str, timestamp: float) -> Dict[str, Any]:
+        """
+        Parse une réponse texte quand le modèle ne renvoie pas de JSON
+        Analyse le contenu pour déterminer si c'est un highlight
+        """
+        text_lower = text.lower()
+        
+        # Mots-clés positifs
+        positive_keywords = ["spectaculaire", "intense", "émotionnel", "surprenant", 
+                            "engageant", "intéressant", "moment fort", "révélation"]
+        
+        # Mots-clés négatifs
+        negative_keywords = ["pas de moment fort", "ne contient pas", "pas d'action",
+                            "pas intéressant", "flou", "pas de détails"]
+        
+        # Calculer un score basé sur les mots-clés
+        score = 5.0
+        reasons = []
+        
+        positive_count = sum(1 for kw in positive_keywords if kw in text_lower)
+        negative_count = sum(1 for kw in negative_keywords if kw in text_lower)
+        
+        if positive_count > 0:
+            score += positive_count * 1.0
+            reasons.append(f"Éléments positifs détectés: {positive_count}")
+        
+        if negative_count > 0:
+            score -= negative_count * 1.0
+            reasons.append(f"Éléments négatifs détectés: {negative_count}")
+        
+        score = max(0, min(10, score))
+        is_highlight = score >= 6.0
+        
+        # Extraire un titre suggéré du texte
+        lines = text.split('\n')
+        title = "Moment analysé"
+        for line in lines[:3]:
+            if len(line.strip()) > 10 and not line.startswith('*'):
+                title = line.strip()[:50]
+                break
+        
+        return {
+            "timestamp": timestamp,
+            "is_highlight": is_highlight,
+            "score": score,
+            "reasons": reasons if reasons else ["Analyse textuelle"],
+            "emotions": [],
+            "visual_elements": [],
+            "suggested_title": title
         }
 
     async def analyze_frames(
