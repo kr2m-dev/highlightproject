@@ -38,6 +38,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # Ignorer les champs supplémentaires dans .env
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
