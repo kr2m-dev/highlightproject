@@ -166,7 +166,7 @@ async def upload_video(
     video_path: Optional[str] = Form(default=None),
     vision_interval: int = Form(default=60),
     max_clips: int = Form(default=20),
-    enable_vision: bool = Form(default=True),
+    enable_vision: bool = Form(default=False),  # Désactivé par défaut (modèle non disponible)
     enable_transcript: bool = Form(default=True)
 ):
     """
