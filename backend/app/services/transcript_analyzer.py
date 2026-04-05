@@ -99,61 +99,106 @@ class TranscriptAnalyzer:
         Analyse le transcript pour détecter les moments forts
         
         Critères:
-        - Mots-clés: "incroyable", "wow", "regardez", "c'est fou", "oh", "yeah"
+        - Mots-clés positifs
         - Exclamations, rires
-        - Questions rhétoriques
-        - Changements de ton
-        
-        Args:
-            transcript: Dict avec text et segments
-            
-        Returns:
-            Liste de moments forts avec timestamp et score
+        - Questions
+        - Répétitions (indiquent l'importance)
+        - Longueur des segments
         """
         highlights = []
         
-        highlight_keywords = [
-            "incroyable", "wow", "regardez", "c'est fou", "oh my god",
-            "incroyable", "extraordinaire", "magnifique", "superbe",
-            "génial", "fantastique", "époustouflant", "surprenant",
-            "yeah", "yes", "oh", "ah", "waouh", "bravo",
-            "super", "top", "best", "amazing", "awesome",
-            "crazy", "insane", "unbelievable", "incredible"
+        # Mots-clés forts (score élevé)
+        strong_keywords = [
+            "incroyable", "wow", "oh my god", "c'est fou", "extraordinaire",
+            "magnifique", "époustouflant", "incroyable", "incroyable",
+            "unbelievable", "amazing", "awesome", "incredible", "insane",
+            "crazy", "fantastic", "superb", "brilliant", "extraordinary"
         ]
         
-        for segment in transcript.get("segments", []):
-            text = segment.get("text", "").lower()
+        # Mots-clés moyens
+        medium_keywords = [
+            "super", "génial", "cool", "bien", "bon", "superbe",
+            "great", "good", "nice", "cool", "awesome", "perfect",
+            "yes", "yeah", "ouais", "ok", "d'accord"
+        ]
+        
+        # Marqueurs d'émotion
+        emotion_markers = [
+            ("!", 0.5),  # Exclamation
+            ("?", 0.3),  # Question
+            ("rire", 1.0),
+            ("lol", 0.8),
+            ("haha", 0.8),
+            ("mdr", 0.8)
+        ]
+        
+        segments = transcript.get("segments", [])
+        
+        for i, segment in enumerate(segments):
+            text = segment.get("text", "")
+            text_lower = text.lower()
             start = segment.get("start", 0)
             
             score = 0
             reasons = []
             
-            for keyword in highlight_keywords:
-                if keyword in text:
-                    score += 1.5
+            # Vérifier mots-clés forts
+            for keyword in strong_keywords:
+                if keyword in text_lower:
+                    score += 2.0
+                    reasons.append(f"Mot-clé fort: '{keyword}'")
+            
+            # Vérifier mots-clés moyens
+            for keyword in medium_keywords:
+                if keyword in text_lower:
+                    score += 1.0
                     reasons.append(f"Mot-clé: '{keyword}'")
             
-            exclamation_count = text.count("!")
-            if exclamation_count > 0:
-                score += exclamation_count * 0.5
-                reasons.append(f"Exclamations: {exclamation_count}")
+            # Vérifier marqueurs d'émotion
+            for marker, points in emotion_markers:
+                count = text_lower.count(marker)
+                if count > 0:
+                    score += count * points
+                    reasons.append(f"Émotion: {marker} (x{count})")
             
-            text_upper = segment.get("text", "")
-            uppercase_ratio = sum(1 for c in text_upper if c.isupper()) / max(len(text_upper), 1)
-            if uppercase_ratio > 0.5:
-                score += 1
-                reasons.append("Ton emphatique (majuscules)")
+            # Segment long = potentiellement important
+            duration = segment.get("end", 0) - segment.get("start", 0)
+            if duration > 10:
+                score += 0.5
+                reasons.append("Segment long")
             
+            # Vérifier la position (intro/outro moins importantes)
+            total_segments = len(segments)
+            if i < total_segments * 0.1:  # Premier 10%
+                score *= 0.8  # Réduire l'importance de l'intro
+            elif i > total_segments * 0.9:  # Dernier 10%
+                score *= 0.8  # Réduire l'importance de l'outro
+            else:
+                score *= 1.1  # Augmenter légèrement le milieu
+            
+            # Score minimum pour être un highlight
             if score > 0:
                 highlights.append({
                     "timestamp": start,
                     "score": min(score, 10),
                     "reasons": reasons,
-                    "text": segment.get("text", ""),
+                    "text": text[:100] if len(text) > 100 else text,
                     "source": "transcript"
                 })
         
-        return highlights
+        # Trier par score et garder les meilleurs
+        highlights.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Éviter les chevauchements (garder max 1 highlight par tranche de 30s)
+        filtered = []
+        for h in highlights:
+            if not any(abs(h["timestamp"] - existing["timestamp"]) < 30 for existing in filtered):
+                filtered.append(h)
+        
+        # Re-trier par timestamp
+        filtered.sort(key=lambda x: x["timestamp"])
+        
+        return filtered
 
     async def analyze_audio(
         self,
