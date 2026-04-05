@@ -1,5 +1,5 @@
 """
-Analyseur de frames vidéo avec support multi-provider (Groq, NVIDIA Kimi, GLM)
+Analyseur de frames vidéo avec Groq Vision API
 """
 import base64
 import json
@@ -14,20 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 class VisionAnalyzer:
-    def __init__(self, api_key: str, provider: str = "nvidia"):
+    def __init__(self, api_key: str):
         self.api_key = api_key
-        self.provider = provider
-        
-        if provider == "nvidia":
-            # NVIDIA API avec modèles multimodaux
-            self.base_url = "https://integrate.api.nvidia.com/v1"
-            self.model = "meta/llama-3.2-11b-vision-instruct"  # Multimodal
-            # Alternatives: "microsoft/phi-3-vision-128k-instruct", "nvidia/neva-22b"
-        else:
-            # Groq API
-            self.base_url = "https://api.groq.com/openai/v1"
-            self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
-        
+        self.base_url = "https://api.groq.com/openai/v1"
+        self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
         self.max_tokens = 800
         self.temperature = 0.2
 
@@ -74,14 +64,11 @@ Un moment fort se caractérise par:
 IMPORTANT: Tu DOIS répondre UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ou après.
 
 Format de réponse obligatoire (JSON uniquement):
-{"is_highlight": false, "score": 5, "reasons": ["raison1"], "emotions": [], "visual_elements": ["element1"], "suggested_title": "Titre"}
-
-Exemple de réponse correcte:
-{"is_highlight": true, "score": 8, "reasons": ["Action intense visible", "Expression faciale marquée"], "emotions": ["surprise"], "visual_elements": ["mouvement rapide"], "suggested_title": "Moment de réaction"}"""
+{"is_highlight": false, "score": 5, "reasons": ["raison1"], "emotions": [], "visual_elements": ["element1"], "suggested_title": "Titre"}"""
 
     async def analyze_frame(self, image_path: Path, timestamp: float) -> Dict[str, Any]:
         """
-        Analyse une frame avec l'API Vision
+        Analyse une frame avec Groq Vision
         
         Args:
             image_path: Chemin vers l'image
@@ -91,7 +78,7 @@ Exemple de réponse correcte:
             Dict avec: timestamp, is_highlight, score, reasons, emotions, visual_elements, suggested_title
         """
         if not self.api_key:
-            logger.warning("Pas de clé API - retourne un score par défaut")
+            logger.warning("Pas de clé API Groq - retourne un score par défaut")
             return {
                 "timestamp": timestamp,
                 "is_highlight": False,
@@ -105,54 +92,43 @@ Exemple de réponse correcte:
         try:
             image_base64 = self._encode_image(image_path)
             
-            logger.info(f"Analyzing frame with {self.provider} - model: {self.model}")
+            logger.info(f"Analyzing frame with model: {self.model}")
             logger.info(f"Image size: {len(image_base64)} bytes (base64)")
-
-            # Format du message pour Kimi (vision)
-            messages = [
-                {
-                    "role": "system",
-                    "content": self._build_prompt()
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Analyse cette image et évalue son potentiel comme moment fort vidéo."},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ]
 
             payload = {
                 "model": self.model,
-                "messages": messages,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": self._build_prompt()
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Analyse cette image et évalue son potentiel comme moment fort vidéo."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}",
+                                    "detail": "high"
+                                }
+                            }
+                        ]
+                    }
+                ],
                 "max_tokens": self.max_tokens,
                 "temperature": self.temperature
             }
 
-            # Headers selon le provider
-            if self.provider == "nvidia":
-                headers = {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                }
-            else:
-                headers = {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Accept": "application/json"
-                }
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9,fr;q=0.8"
+            }
 
-            timeout = 120.0 if self.provider == "nvidia" else 60.0
-            
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     json=payload,
@@ -163,13 +139,12 @@ Exemple de réponse correcte:
                 logger.info(f"API Response Body: {response.text[:500]}")
 
                 if response.status_code != 200:
-                    logger.error(f"Erreur API {self.provider}: {response.status_code} - {response.text}")
+                    logger.error(f"Erreur API Groq: {response.status_code} - {response.text}")
                     return self._default_result(timestamp, f"Erreur API: {response.status_code}")
 
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
                 
-                # Essayer de parser le JSON
                 try:
                     json_start = content.find("{")
                     json_end = content.rfind("}") + 1
@@ -189,9 +164,8 @@ Exemple de réponse correcte:
                         "suggested_title": result.get("suggested_title", "Moment non nommé")
                     }
                 except json.JSONDecodeError as e:
-                    # Si pas de JSON, analyser le texte pour extraire les infos
-                    logger.warning(f"Erreur parsing JSON, analyse texte: {e}")
-                    return self._parse_text_response(content, timestamp)
+                    logger.warning(f"Erreur parsing JSON: {e} - Content: {content}")
+                    return self._default_result(timestamp, "Erreur parsing réponse")
 
         except Exception as e:
             logger.error(f"Erreur analyse frame {image_path}: {e}")
@@ -207,57 +181,6 @@ Exemple de réponse correcte:
             "emotions": [],
             "visual_elements": [],
             "suggested_title": "Erreur d'analyse"
-        }
-
-    def _parse_text_response(self, text: str, timestamp: float) -> Dict[str, Any]:
-        """
-        Parse une réponse texte quand le modèle ne renvoie pas de JSON
-        Analyse le contenu pour déterminer si c'est un highlight
-        """
-        text_lower = text.lower()
-        
-        # Mots-clés positifs
-        positive_keywords = ["spectaculaire", "intense", "émotionnel", "surprenant", 
-                            "engageant", "intéressant", "moment fort", "révélation"]
-        
-        # Mots-clés négatifs
-        negative_keywords = ["pas de moment fort", "ne contient pas", "pas d'action",
-                            "pas intéressant", "flou", "pas de détails"]
-        
-        # Calculer un score basé sur les mots-clés
-        score = 5.0
-        reasons = []
-        
-        positive_count = sum(1 for kw in positive_keywords if kw in text_lower)
-        negative_count = sum(1 for kw in negative_keywords if kw in text_lower)
-        
-        if positive_count > 0:
-            score += positive_count * 1.0
-            reasons.append(f"Éléments positifs détectés: {positive_count}")
-        
-        if negative_count > 0:
-            score -= negative_count * 1.0
-            reasons.append(f"Éléments négatifs détectés: {negative_count}")
-        
-        score = max(0, min(10, score))
-        is_highlight = score >= 6.0
-        
-        # Extraire un titre suggéré du texte
-        lines = text.split('\n')
-        title = "Moment analysé"
-        for line in lines[:3]:
-            if len(line.strip()) > 10 and not line.startswith('*'):
-                title = line.strip()[:50]
-                break
-        
-        return {
-            "timestamp": timestamp,
-            "is_highlight": is_highlight,
-            "score": score,
-            "reasons": reasons if reasons else ["Analyse textuelle"],
-            "emotions": [],
-            "visual_elements": [],
-            "suggested_title": title
         }
 
     async def analyze_frames(

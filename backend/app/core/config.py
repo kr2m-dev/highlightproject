@@ -18,13 +18,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     GROQ_API_KEY: Optional[str] = None
-    NVIDIA_API_KEY: Optional[str] = None
-    
-    # Provider: "groq" ou "nvidia"
-    VISION_PROVIDER: str = "nvidia"
-    
+
     GROQ_MODEL_VISION: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    NVIDIA_MODEL_VISION: str = "meta/llama-3.2-11b-vision-instruct"  # Modèle multimodal NVIDIA
+    GROQ_MODEL_WHISPER: str = "whisper-large-v3"
     
     GROQ_MODEL_WHISPER: str = "whisper-large-v3"
     GROQ_MAX_TOKENS: int = 800
