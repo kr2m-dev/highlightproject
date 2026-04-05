@@ -19,10 +19,10 @@ class VisionAnalyzer:
         self.provider = provider
         
         if provider == "nvidia":
-            # NVIDIA API avec Kimi K2 ou GLM
+            # NVIDIA API avec modèles multimodaux
             self.base_url = "https://integrate.api.nvidia.com/v1"
-            self.model = "moonshotai/kimi-k2-instruct-0905"  # Excellent pour la vision
-            # Alternative: "z-ai/glm5" pour GLM
+            self.model = "meta/llama-3.2-11b-vision-instruct"  # Multimodal
+            # Alternatives: "microsoft/phi-3-vision-128k-instruct", "nvidia/neva-22b"
         else:
             # Groq API
             self.base_url = "https://api.groq.com/openai/v1"

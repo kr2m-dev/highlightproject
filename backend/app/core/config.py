@@ -24,8 +24,7 @@ class Settings(BaseSettings):
     VISION_PROVIDER: str = "nvidia"
     
     GROQ_MODEL_VISION: str = "meta-llama/llama-4-scout-17b-16e-instruct"
-    NVIDIA_MODEL_VISION: str = "moonshotai/kimi-k2-instruct-0905"  # Excellent pour vision
-    # Alternative NVIDIA: "z-ai/glm5"
+    NVIDIA_MODEL_VISION: str = "meta/llama-3.2-11b-vision-instruct"  # Modèle multimodal NVIDIA
     
     GROQ_MODEL_WHISPER: str = "whisper-large-v3"
     GROQ_MAX_TOKENS: int = 800
