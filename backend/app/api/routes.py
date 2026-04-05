@@ -3,6 +3,7 @@ Routes API pour Video Highlight Extractor
 """
 import uuid
 import os
+import json
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -428,6 +429,28 @@ async def get_job_result(job_id: str):
     if job_id not in results_store:
         raise HTTPException(status_code=404, detail="Résultat non trouvé")
     return results_store[job_id]
+
+
+@app.get("/api/v1/jobs/{job_id}/export")
+async def export_job_result(job_id: str):
+    """Télécharge les résultats en JSON"""
+    from fastapi.responses import Response
+    
+    if job_id not in results_store:
+        raise HTTPException(status_code=404, detail="Résultat non trouvé")
+    
+    result = results_store[job_id].model_dump()
+    result["created_at"] = result["created_at"].isoformat()
+    
+    json_content = json.dumps(result, indent=2, ensure_ascii=False)
+    
+    return Response(
+        content=json_content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename=highlights_{job_id}.json"
+        }
+    )
 
 
 @app.get("/api/v1/jobs")

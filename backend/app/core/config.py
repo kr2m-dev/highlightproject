@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     CACHE_DIR: Path = Path("./tmp/cache")
 
     DEFAULT_VISION_INTERVAL: int = 60
-    DEFAULT_MAX_CLIPS: int = 20
+    DEFAULT_MAX_CLIPS: int = 10  # Réduit pour éviter rate limiting
 
     class Config:
         env_file = ".env"
